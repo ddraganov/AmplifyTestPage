@@ -1,0 +1,108 @@
+:root {
+  --text-color: ;
+  --placeholder-color: ;
+  --error-text-color: ;
+  --bg-color: ;
+  --border-color: ;
+  --focus-border-color: ;
+  --error-border-color: ;
+  --btn-text-color: ;
+  --btn-bg-color: ;
+  --btn-hover-bg-color: ;
+}
+
+* {
+  padding: 0;
+  margin: 0;
+}
+
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: rgb(18, 18, 18);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  max-width: 688px;
+  width: 100%;
+}
+
+.multiple-row-item {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+}
+
+input {
+  width: 100%;
+  height: 56px;
+  padding: 12px;
+  border-radius: 8px;
+  outline: none;
+  box-sizing: border-box;
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-color);
+}
+
+input::placeholder {
+  color: var(--placeholder-color) !important;
+  font-weight: 400;
+}
+
+input:focus {
+  border-color: var(--focus-border-color);
+}
+
+.card-field {
+  width: 100%;
+  height: 56px;
+  border-radius: 8px;
+  padding: 18px 12px 12px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-color);
+}
+
+.card-field.sfc-focus {
+  border-color: var(--focus-border-color);
+}
+
+.init-button {
+   width: 100%;
+  height: 40px;
+  background: red;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  padding-inline: 12px;
+  border: 0px solid black;
+}
+
+.action-button {
+  width: 100%;
+  height: 40px;
+  background: var(--btn-bg-color);
+  border-radius: 8px;
+  color: var(--btn-text-color);
+  cursor: pointer;
+  padding-inline: 12px;
+  border: 0px solid black;
+}
+
+.action-button:hover {
+  background: var(--btn-hover-bg-color);
+}
+
+.action-button:disabled {
+  opacity: 0.36;
+}
