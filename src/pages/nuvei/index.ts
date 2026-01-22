@@ -6,6 +6,8 @@ import type {
   AdditionalParams,
   Field,
   SafeChargeStatic,
+  TokenResponse,
+  CreatePaymentResponse,
 } from "../../types";
 import {
   INIT_SUCCESS,
@@ -13,10 +15,17 @@ import {
   GENERATE_TOKEN_FAILED,
   PAYMENT_SUCCESS,
   PAYMENT_FAILED,
+  INIT_NUVEI,
+  INIT_PAYMENT,
 } from "../../utils/events";
-import { applyStyles } from "../../utils/colors";
+import {
+  applyButtonDisability,
+  applyFieldBorderColor,
+  applyStyles,
+} from "../../utils/applyStyles";
 import "../../style.css";
 
+let initCompleted: boolean = false;
 let sfc: SafeChargeInstance | undefined;
 let cardData: CardData | Field | undefined;
 let cvvField: CardData | Field | undefined;
@@ -34,6 +43,7 @@ async function init(config: Config) {
     colors,
     additionalParams,
     showCvvForm,
+    amount,
   } = config;
 
   const SafeCharge: SafeChargeStatic | undefined = await loadSafeCharge(src);
@@ -48,61 +58,67 @@ async function init(config: Config) {
   isCvvForm = showCvvForm;
 
   const fields = sfc?.fields({ locale: "en" });
-  const fieldStyles = applyStyles(colors);
+  const fieldStyles = applyStyles({ colors, amount });
+
+  function notifyInitSuccess() {
+    if (initCompleted) return;
+    initCompleted = true;
+
+    window.ReactNativeWebView?.postMessage(
+      JSON.stringify({ type: INIT_SUCCESS }),
+    );
+  }
 
   if (!isCvvForm) {
     const cardNumberField = fields?.create("ccNumber", {
       style: fieldStyles,
+    });
+    cardNumberField?.on("change", ({ allFieldsCompleted, complete, field }) => {
+      applyButtonDisability(allFieldsCompleted);
+      applyFieldBorderColor(complete, field);
     });
     cardNumberField?.attach("#card-number");
 
     const cardExpiry = fields?.create("ccExpiration", {
       style: fieldStyles,
     });
+    cardExpiry?.on("change", ({ allFieldsCompleted, complete, field }) => {
+      applyButtonDisability(allFieldsCompleted);
+      applyFieldBorderColor(complete, field);
+    });
     cardExpiry?.attach("#card-expiry");
 
     const cardCvc = fields?.create("ccCvc", {
       style: fieldStyles,
     });
+    cardCvc?.on("change", ({ allFieldsCompleted, complete, field }) => {
+      applyButtonDisability(allFieldsCompleted);
+      applyFieldBorderColor(complete, field);
+    });
     cardCvc?.attach("#card-cvc");
 
     cardData = cardNumberField;
+    notifyInitSuccess();
   } else {
-    const cardHolder = document.getElementById("cardHolderName");
-    const cardNumber = document.getElementById("card-number");
-    const cardExpiry = document.getElementById("card-expiry");
-
-    if (cardNumber) cardNumber.style.display = "none";
-    if (cardExpiry) cardExpiry.style.display = "none";
-    if (cardHolder) cardHolder.style.display = "none";
+    document.getElementById("cardHolderName")?.remove();
+    document.getElementById("card-number")?.remove();
+    document.getElementById("card-expiry")?.remove();
 
     const cardCvc = fields?.create("ccCvc", {
       style: fieldStyles,
     });
+    cardCvc?.on("change", ({ complete, field }) => {
+      applyButtonDisability(complete);
+      applyFieldBorderColor(complete, field);
+    });
     cardCvc?.attach("#card-cvc");
 
     cvvField = cardCvc;
-  }
-
-  if (window.ReactNativeWebView && sfc && fields && fieldStyles) {
-    window.ReactNativeWebView.postMessage(
-      JSON.stringify({ type: INIT_SUCCESS }),
-    );
+    notifyInitSuccess();
   }
 }
 
-window.onPaymentOptionReceived = (data: {
-  userPaymentOptionId: string;
-  paymentSessionToken: string;
-}) => {
-  params = {
-    ...params,
-    userPaymentOptionId: data.userPaymentOptionId,
-    paymentSessionToken: data.paymentSessionToken,
-  };
-};
-
-async function getToken() {
+async function getToken(): Promise<TokenResponse | undefined> {
   const { billingAddress, sessionToken } = params;
   if (!sfc || !cardData || !billingAddress || !sessionToken) return;
 
@@ -115,14 +131,18 @@ async function getToken() {
       billingAddress,
     });
 
-    console.log(GENERATE_TOKEN_SUCCESS, ccTempToken);
     if (window?.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage(
-        JSON.stringify({ type: GENERATE_TOKEN_SUCCESS, ccTempToken }),
+        JSON.stringify({
+          type: GENERATE_TOKEN_SUCCESS,
+          ccTempToken,
+          cardholderName:
+            (document.getElementById("cardHolderName") as HTMLInputElement)
+              ?.value || "",
+        }),
       );
     }
   } catch (error) {
-    console.error(GENERATE_TOKEN_FAILED, error);
     if (window?.ReactNativeWebView) {
       window.ReactNativeWebView.postMessage(
         JSON.stringify({ type: GENERATE_TOKEN_FAILED, error }),
@@ -131,7 +151,7 @@ async function getToken() {
   }
 }
 
-function createPayment() {
+function createPayment(): CreatePaymentResponse | undefined {
   const { paymentSessionToken, userPaymentOptionId, billingAddress } = params;
 
   if (
@@ -154,68 +174,63 @@ function createPayment() {
       billingAddress: billingAddress,
       sessionToken: paymentSessionToken,
     },
-    (result) => {
+    ({ status, transactionStatus }) => {
       if (window.ReactNativeWebView) {
-        if (result.status === "SUCCESS") {
+        if (status === "SUCCESS") {
           window.ReactNativeWebView.postMessage(
-            JSON.stringify({ type: PAYMENT_SUCCESS, result }),
+            JSON.stringify({ type: PAYMENT_SUCCESS, transactionStatus }),
           );
         } else {
           window.ReactNativeWebView.postMessage(
-            JSON.stringify({ type: PAYMENT_FAILED, result }),
+            JSON.stringify({ type: PAYMENT_FAILED, transactionStatus }),
           );
         }
       }
-      console.log("CREATE_PAYMENT_SUCCESS", result);
     },
   );
 }
 
+function handleMessage(event: MessageEvent) {
+  try {
+    const data =
+      typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+
+    switch (data?.type) {
+      case INIT_NUVEI:
+        init(data.payload);
+        break;
+
+      case INIT_PAYMENT:
+        params = {
+          ...params,
+          userPaymentOptionId: data.payload.userPaymentOptionId,
+          paymentSessionToken: data.payload.paymentSessionToken,
+        };
+        createPayment();
+        break;
+    }
+  } catch (e) {
+    console.warn("Invalid message received", e);
+  }
+}
+
+window.addEventListener("message", handleMessage);
+document.addEventListener("message", handleMessage as EventListener);
+
 export function NuveiPage() {
   document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
-    <button type="button" id="initBtn" class="init-button">Init</button>
-    <div class="container">
       <form class="form">
-        <input id="cardHolderName" placeholder="Cardholder Name" type="text" />
-        <div id="card-number" class="card-field"></div>
-        <div class="multiple-row-item">
-          <div id="card-expiry" class="card-field"></div>
-          <div id="card-cvc" class="card-field"></div>
+        <div class="fields">
+          <input id="cardHolderName" placeholder="Cardholder Name" type="text" />
+          <div id="card-number" class="card-field"></div>
+          <div class="multiple-row-item">
+            <div id="card-expiry" class="card-field"></div>
+            <div id="card-cvc" class="card-field"></div>
+          </div>
         </div>
-        <button type="button" id="depositBtn" class="action-button">Deposit</button>
+        <button type="button" id="depositBtn" disabled class="action-button">Deposit</button>
       </form>
-    </div>
 `;
-
-  document.getElementById("initBtn")!.addEventListener("click", () =>
-    init({
-      merchantId: "1856371907611671305",
-      merchantSiteId: "231948",
-      env: "int",
-      src: "https://cdn.safecharge.com/safecharge_resources/v1/websdk/safecharge.js",
-      additionalParams: {
-        sessionToken: "b3f68806dcb54d42bc121e789c530f950121",
-        billingAddress: { email: "john.doe@example.com", country: "CA" },
-        paymentSessionToken: "14fe3108266d48f6bd1422f4dd33ae1c0121",
-        userPaymentOptionId: "3226638111",
-      },
-      showCvvForm: false,
-      colors: {
-        placeholderColor: "#A0A0A0",
-        textColor: "rgb(255, 255, 255)",
-        errorTextColor: "rgb(197, 36, 23)",
-        backgroundColor: "rgba(0, 0, 0, 0.97)",
-        borderColor: "rgb(42, 42, 42)",
-        focusBorderColor: "rgb(255, 255, 255)",
-        errorBorderColor: "rgb(197, 36, 23)",
-        btnTextColor: "rgb(18, 18, 18)",
-        btnBgColor:
-          "linear-gradient(127deg, #ffeba5 0%, #ffc700 84.61%, #ffe27b 100%)",
-        btnHoverBgColor:
-          "linear-gradient(134deg, #ffc700 13.02%, #ffe27b 77.97%)",
-      },
-    }),
-  );
 
   document.getElementById("depositBtn")!.addEventListener("click", () => {
     if (isCvvForm) {

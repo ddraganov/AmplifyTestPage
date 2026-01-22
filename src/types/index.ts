@@ -1,4 +1,3 @@
-// Fields
 export type Field = {
   attach(selector: string): void;
   detach(): void;
@@ -32,11 +31,16 @@ type FieldStyle = {
 type FieldState = {
   empty: boolean;
   complete: boolean;
+  allFieldsCompleted: boolean;
+  field: FieldType;
+  error: {
+    id: string;
+    message: string;
+  }
 };
 
-type FieldType = "ccNumber" | "ccExpiration" | "ccCvc";
+export type FieldType = "ccNumber" | "ccExpiration" | "ccCvc";
 
-// Common
 export type BillingAddress = {
   email: string;
   country: string;
@@ -56,7 +60,7 @@ type TokenParams = {
   billingAddress: BillingAddress;
 };
 
-type TokenResponse = {
+export type TokenResponse = {
   cardType: string;
   ccTempToken: string;
   sessionToken: string;
@@ -85,27 +89,15 @@ export type CreatePaymentResponse = {
   externalTransactionId?: string;
 };
 
-// Config
 export type Config = {
   merchantId: string;
   merchantSiteId: string;
   env: "int" | "prod";
   src: string;
-  additionalParams: {
-    sessionToken?: string;
-    billingAddress: BillingAddress;
-    userPaymentOptionId?: string;
-    paymentSessionToken?: string;
-  };
+  additionalParams: AdditionalParams;
   showCvvForm: boolean;
+  amount: number;
   colors: Colors;
-};
-
-export type Init = {
-  merchantId: string;
-  merchantSiteId: string;
-  env: "int" | "prod";
-  src: string;
 };
 
 type Colors = {
